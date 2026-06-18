@@ -1,0 +1,76 @@
+{
+  "name": "@deadlock-too/scrape-kit",
+  "version": "1.0.2",
+  "description": "TypeScript toolkit for building resilient website-scraper clients: a retrying fetch client with backoff and User-Agent rotation, fuzzy title matching, a typed result/error model, and a base service to extend.",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "sideEffects": false,
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "scraper",
+    "api",
+    "typescript"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "test": "jest",
+    "test:coverage": "jest --coverage",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "changeset": "changeset",
+    "version": "changeset version",
+    "release": "npm run build && changeset publish",
+    "prepare": "npm run build"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "author": "Deadlock-too",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "homepage": "https://github.com/Deadlock-too/scrape-kit#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Deadlock-too/scrape-kit.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Deadlock-too/scrape-kit/issues"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.31.0",
+    "@eslint/js": "^10.0.1",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^25.9.3",
+    "eslint": "^10.5.0",
+    "eslint-config-prettier": "^10.1.8",
+    "jest": "^30.4.2",
+    "prettier": "^3.8.4",
+    "ts-jest": "^29.4.11",
+    "ts-node": "^10.9.2",
+    "tsdown": "^0.21.10",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.61.1"
+  },
+  "allowScripts": {
+    "unrs-resolver@1.12.2": true
+  }
+}
