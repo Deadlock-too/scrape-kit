@@ -12,22 +12,33 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      id-token: write # required for npm trusted publishing (OIDC)
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Note: no `registry-url` here on purpose. Passing it makes setup-node
+      # write an .npmrc with a placeholder `_authToken`, which npm would use
+      # instead of performing the OIDC exchange — breaking trusted publishing.
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
-          registry-url: https://registry.npmjs.org
+
+      # Trusted publishing (OIDC) requires npm >= 11.5.1; Node 22 ships npm 10.
+      # Pinned to the 11.x line so a future npm major can't change OIDC behavior
+      # from under us.
+      - name: Upgrade npm
+        run: npm install -g "npm@^11.5.1"
 
       - name: Install dependencies
         run: npm ci
 
       # Opens/updates a "Version Packages" PR from pending changesets, and
-      # publishes to npm once that PR is merged.
+      # publishes to npm once that PR is merged. Publishing authenticates via
+      # OIDC trusted publishing (configured on npmjs.com), so no NPM_TOKEN is
+      # needed and npm attaches provenance automatically.
       - name: Create release pull request or publish
         uses: changesets/action@v1
         with:
@@ -35,5 +46,3 @@ jobs:
           publish: npm run release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
