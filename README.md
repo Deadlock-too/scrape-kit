@@ -23,7 +23,7 @@ This is the shared foundation behind my [howlongtobeat-ts](https://github.com/De
 ## Installation
 
 ```bash
-npm install scrape-kit
+npm install @deadlock-too/scrape-kit
 ```
 
 Requires Node.js 18 or newer (the toolkit uses the global `fetch`).
@@ -35,7 +35,15 @@ Requires Node.js 18 or newer (the toolkit uses the global `fetch`).
 Extend `BaseScraperService`; it gives you a ready-made `http` client, `logger` and `minSimilarity` threshold. Return `Result<T>` from your public methods so callers never have to wrap calls in `try`/`catch`.
 
 ```typescript
-import { BaseScraperService, ScraperError, fail, getMatchScore, ok, type Result, type ScraperOptions } from 'scrape-kit'
+import {
+  BaseScraperService,
+  ScraperError,
+  fail,
+  getMatchScore,
+  ok,
+  type Result,
+  type ScraperOptions,
+} from '@deadlock-too/scrape-kit'
 
 interface Movie {
   title: string
@@ -88,7 +96,7 @@ if (result.success) {
 Pass an options object to the constructor (a bare `number` is also accepted as `minSimilarity`):
 
 ```typescript
-import { consoleLogger } from 'scrape-kit'
+import { consoleLogger } from '@deadlock-too/scrape-kit'
 
 const scraper = new TinyMovieScraper({
   minSimilarity: 0.5, // min similarity threshold (0–1), clamped
@@ -111,7 +119,7 @@ controller.abort()
 The HTTP client is useful on its own when you don't need the full service base:
 
 ```typescript
-import { HttpClient } from 'scrape-kit'
+import { HttpClient } from '@deadlock-too/scrape-kit'
 
 const http = new HttpClient({ retries: 3, timeout: 10_000 })
 const response = await http.request('https://example.com')
@@ -120,7 +128,7 @@ const response = await http.request('https://example.com')
 ### Fuzzy matching helpers
 
 ```typescript
-import { getMatchScore, getSimilarity, normalize } from 'scrape-kit'
+import { getMatchScore, getSimilarity, normalize } from '@deadlock-too/scrape-kit'
 
 normalize("Marvel's Spider-Man") // "marvel s spider man"
 getSimilarity('Elden Ring', 'Elden Rin') // 0.9
