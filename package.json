@@ -1,6 +1,6 @@
 {
   "name": "@deadlock-too/scrape-kit",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "description": "TypeScript toolkit for building resilient website-scraper clients: a retrying fetch client with backoff and User-Agent rotation, fuzzy title matching, a typed result/error model, and a base service to extend.",
   "main": "dist/index.js",
   "module": "dist/index.js",
