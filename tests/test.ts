@@ -2,16 +2,21 @@ import { afterEach, describe, expect, jest, test } from '@jest/globals'
 import {
   BaseScraperService,
   clampSimilarity,
+  classifyError,
   consoleLogger,
   DEFAULT_USER_AGENTS,
+  describeFailure,
   fail,
+  failFrom,
   getMatchScore,
   getSimilarity,
   HttpClient,
+  HttpError,
   normalize,
   ok,
   ScraperError,
   silentLogger,
+  type FailureKind,
   type FetchLike,
   type Logger,
   type ScraperOptions,
@@ -44,6 +49,20 @@ describe('result', () => {
   test('fail wraps a message in a failure result', () => {
     expect(fail('nope')).toEqual({ success: false, error: 'nope' })
   })
+
+  test('fail omits kind and status entirely when they are not supplied', () => {
+    const failure = fail('nope')
+    expect(Object.keys(failure)).toEqual(['success', 'error'])
+  })
+
+  test('fail attaches a kind and a status when supplied', () => {
+    expect(fail('nope', { kind: 'http', status: 503 })).toEqual({
+      success: false,
+      error: 'nope',
+      kind: 'http',
+      status: 503,
+    })
+  })
 })
 
 describe('ScraperError', () => {
@@ -59,6 +78,197 @@ describe('ScraperError', () => {
   test('leaves the cause undefined when omitted', () => {
     const error = new ScraperError('broke')
     expect(error.cause).toBeUndefined()
+  })
+
+  test('defaults to the parse kind, preserving its original meaning', () => {
+    expect(new ScraperError('broke').kind).toBe('parse')
+  })
+
+  test('accepts an explicit kind', () => {
+    expect(new ScraperError('broke', undefined, 'transport').kind).toBe('transport')
+  })
+})
+
+describe('HttpError', () => {
+  test('carries the status as data and classifies itself as http', () => {
+    const error = new HttpError('Search request failed with status 403', 403)
+    expect(error.name).toBe('HttpError')
+    expect(error.status).toBe(403)
+    expect(error.kind).toBe('http')
+  })
+
+  test('remains a ScraperError so existing catch clauses keep matching', () => {
+    expect(new HttpError('boom', 500)).toBeInstanceOf(ScraperError)
+  })
+
+  test('forwards a cause', () => {
+    const cause = new Error('root')
+    expect(new HttpError('boom', 500, cause).cause).toBe(cause)
+  })
+})
+
+describe('classifyError', () => {
+  /** Mirrors how undici surfaces a socket error through `fetch`. */
+  function fetchFailure(code: string): TypeError {
+    const cause = Object.assign(new Error(`connect ${code} 127.0.0.1:1`), { code })
+    return Object.assign(new TypeError('fetch failed'), { cause })
+  }
+
+  test('reads the status straight off an HttpError', () => {
+    expect(classifyError(new HttpError('boom', 429))).toEqual({ kind: 'http', status: 429 })
+  })
+
+  test('trusts the kind a ScraperError carries', () => {
+    expect(classifyError(new ScraperError('boom'))).toEqual({ kind: 'parse' })
+    expect(classifyError(new ScraperError('boom', undefined, 'transport'))).toEqual({ kind: 'transport' })
+  })
+
+  test('recognises a caller abort by name', () => {
+    expect(classifyError(new DOMException('This operation was aborted', 'AbortError'))).toEqual({ kind: 'aborted' })
+  })
+
+  test('recognises the client timeout by name', () => {
+    expect(classifyError(new DOMException('The request timed out', 'TimeoutError'))).toEqual({ kind: 'timeout' })
+  })
+
+  test('unwraps a refused connection hidden behind "fetch failed"', () => {
+    expect(classifyError(fetchFailure('ECONNREFUSED'))).toEqual({ kind: 'transport' })
+  })
+
+  test('prefers a timeout code deeper in the chain over the outer TypeError', () => {
+    expect(classifyError(fetchFailure('UND_ERR_HEADERS_TIMEOUT'))).toEqual({ kind: 'timeout' })
+  })
+
+  test('recognises DNS failures', () => {
+    expect(classifyError(fetchFailure('ENOTFOUND'))).toEqual({ kind: 'transport' })
+  })
+
+  test('falls back to transport for a bare fetch TypeError with no cause', () => {
+    expect(classifyError(new TypeError('fetch failed'))).toEqual({ kind: 'transport' })
+    expect(classifyError(new TypeError('Failed to fetch'))).toEqual({ kind: 'transport' })
+  })
+
+  test('treats a JSON SyntaxError as a parse failure', () => {
+    let thrown: unknown
+    try {
+      JSON.parse('{ not json }')
+    } catch (error) {
+      thrown = error
+    }
+    expect(classifyError(thrown)).toEqual({ kind: 'parse' })
+  })
+
+  test('does not mistake an ordinary TypeError for a transport failure', () => {
+    expect(classifyError(new TypeError('x is not a function'))).toEqual({ kind: 'unknown' })
+  })
+
+  test('returns unknown for values it cannot attribute', () => {
+    expect(classifyError(new Error('socket hang up'))).toEqual({ kind: 'unknown' })
+    expect(classifyError('string failure')).toEqual({ kind: 'unknown' })
+    expect(classifyError(undefined)).toEqual({ kind: 'unknown' })
+  })
+
+  test('does not guess at an errno it does not recognise', () => {
+    const error = Object.assign(new Error('boom'), { code: 'ERR_SOMETHING_NEW' })
+    expect(classifyError(error)).toEqual({ kind: 'unknown' })
+  })
+
+  test('unwraps the AggregateError fetch produces for a dual-stack host', () => {
+    // When a hostname resolves to both ::1 and 127.0.0.1, `fetch` tries both
+    // and buries the errno two levels down, inside an array.
+    const attempts = [
+      Object.assign(new Error('connect ECONNREFUSED ::1:8080'), { code: 'ECONNREFUSED' }),
+      Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:8080'), { code: 'ECONNREFUSED' }),
+    ]
+    // Built structurally rather than with `new AggregateError`: classification
+    // is duck-typed on `errors`, and the real aggregate does not always carry a
+    // `code` of its own for the walk to shortcut on.
+    const aggregate = Object.assign(new Error(''), { name: 'AggregateError', errors: attempts })
+    const error = Object.assign(new TypeError('fetch failed'), { cause: aggregate })
+
+    expect(classifyError(error)).toEqual({ kind: 'transport' })
+  })
+
+  test('survives a cycle reached through an AggregateError', () => {
+    const inner: { name: string; errors?: unknown[] } = { name: 'Inner' }
+    inner.errors = [inner]
+    expect(classifyError(inner)).toEqual({ kind: 'unknown' })
+  })
+
+  test('survives a cyclic cause chain', () => {
+    const a: { cause?: unknown; name: string } = { name: 'A' }
+    const b = { name: 'B', cause: a }
+    a.cause = b
+    expect(classifyError(a)).toEqual({ kind: 'unknown' })
+  })
+})
+
+describe('failFrom', () => {
+  test('keeps the message of an error the toolkit raised itself', () => {
+    const failure = failFrom(new ScraperError('missing "data" array'), 'Example')
+    expect(failure).toEqual({ success: false, error: 'missing "data" array', kind: 'parse' })
+  })
+
+  test('carries the status through from an HttpError', () => {
+    const failure = failFrom(new HttpError('Example returned HTTP 403', 403), 'Example')
+    expect(failure).toEqual({ success: false, error: 'Example returned HTTP 403', kind: 'http', status: 403 })
+  })
+
+  test('generates a correctly attributed message for a foreign error', () => {
+    const failure = failFrom(new DOMException('The request timed out', 'TimeoutError'), 'Example')
+    expect(failure).toEqual({ success: false, error: 'The Example request timed out', kind: 'timeout' })
+  })
+
+  test('reports unknown by default when the error cannot be attributed', () => {
+    expect(failFrom(new Error('socket hang up'), 'Example')).toEqual({
+      success: false,
+      error: 'The Example request failed for an unknown reason',
+      kind: 'unknown',
+    })
+  })
+
+  test('a parse-phase catch claims an unattributable error as its own', () => {
+    // Walking a payload that changed shape throws a bare TypeError that looks
+    // like nothing in particular — but in a parse `catch` it can only be a
+    // parse failure.
+    const error = new TypeError("Cannot read properties of undefined (reading 'items')")
+    expect(failFrom(error, 'Example', 'parse')).toEqual({
+      success: false,
+      error: 'Failed to parse the Example response (the site structure may have changed)',
+      kind: 'parse',
+    })
+  })
+
+  test('a fallback kind never overrides a positive identification', () => {
+    const aborted = new DOMException('This operation was aborted', 'AbortError')
+    expect(failFrom(aborted, 'Example', 'parse').kind).toBe('aborted')
+    expect(failFrom(new HttpError('boom', 500), 'Example', 'parse')).toMatchObject({ kind: 'http', status: 500 })
+  })
+})
+
+describe('describeFailure', () => {
+  test('names the subsystem for every kind', () => {
+    const kinds: FailureKind[] = ['input', 'transport', 'timeout', 'aborted', 'http', 'parse', 'notFound', 'unknown']
+    for (const kind of kinds) {
+      expect(describeFailure(kind, 'Example')).toContain('Example')
+    }
+  })
+
+  test('does not describe an absent record as a malfunction', () => {
+    expect(describeFailure('notFound', 'Example')).toBe('Example has no matching entry')
+  })
+
+  test('includes the status when there is one', () => {
+    expect(describeFailure('http', 'Example', 503)).toBe('Example returned HTTP 503 for the request')
+    expect(describeFailure('http', 'Example')).toBe('Example returned an error status')
+  })
+
+  test('points a parse failure at the site rather than the network', () => {
+    expect(describeFailure('parse', 'Example')).toMatch(/parse the Example response/)
+  })
+
+  test('points a transport failure at the network rather than the parser', () => {
+    expect(describeFailure('transport', 'Example')).toMatch(/Could not reach Example/)
   })
 })
 
