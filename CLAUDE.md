@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 `scrape-kit` is a TypeScript library published to npm as `@deadlock-too/scrape-kit`: the shared toolkit behind Stefan's scraper libraries (metacritic-ts, howlongtobeat-ts, justwatch-ts) — the retrying fetch client, title matching, and the result and failure model they all return. A change here reaches them only after it is released and each of them bumps its dependency, so a change to anything `src/index.ts` exports is a change to four public APIs, not one.
 
-Ideas for this library live in Index (index.ppt.fyi), Stefan's project manager, and not in this repository.
+Tasks for this library live in Index (index.ppt.fyi), Stefan's project manager, and not in this repository.
 
 ## Commands
 
@@ -24,7 +24,7 @@ Before opening a pull request, run what `.github/workflows/ci.yml` runs — lint
 
 ## Git
 
-**Git follows the rules Index sends.** How a branch is named, how a pull request is opened and described, whose commits they are, what a commit message says and how a rewrite keeps its dates are written once, in the instructions the Index MCP server gives every agent connected to it (they are written down in Index's own repository), so that the owner's repositories cannot drift apart again: the branch named after the idea's key (`feat/k3m9qa-login-github`), a pull request the owner merges with "Rebase and merge", the owner as author and committer with one `Co-Authored-By` trailer and no link, English commit messages, a description with no link to the session. An agent without Index connected asks the owner before its first commit. What follows is only what this repository adds to them.
+**Git follows the rules Index sends.** How a branch is named, how a pull request is opened and described, whose commits they are, what a commit message says and how a rewrite keeps its dates are written once, in the instructions the Index MCP server gives every agent connected to it (they are written down in Index's own repository), so that the owner's repositories cannot drift apart again: the branch named after the task's key (`feat/k3m9qa-login-github`), a pull request the owner merges with "Rebase and merge", the owner as author and committer with one `Co-Authored-By` trailer and no link, English commit messages, a description with no link to the session. An agent without Index connected asks the owner before its first commit. What follows is only what this repository adds to them.
 
 **What this repository adds to them.** The "Version Packages" pull request is the owner's to merge too, like every other. The owner's address is the one on the owner's own commits, `git log --author='^Deadlock-too <' -1 --format='%an <%ae>'`, not the `users.noreply.github.com` address a merge on GitHub records, and the older commits in this history authored by `Claude` are what the rule replaced, not a precedent. A pull request's description follows `.github/pull_request_template.md`, and says that what `.github/workflows/ci.yml` runs passed.
 
